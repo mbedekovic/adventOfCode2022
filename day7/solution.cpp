@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <numeric>
@@ -85,8 +86,9 @@ FilePtr parseFileTree(std::ifstream& input)
     return root;
 }
 
-std::vector<size_t> sizes;
-size_t              findDirsSmallerThan(File* node, size_t maxSize)
+using ConditionCheck = std::function<void(size_t)>;
+
+size_t checkDirSizeForCondition(File* node, ConditionCheck const& condition)
 {
     if (node->children.empty())
     {
@@ -100,38 +102,9 @@ size_t              findDirsSmallerThan(File* node, size_t maxSize)
         // this is a directory, sum all his children
         for (auto& child : node->children)
         {
-            nodeSize += findDirsSmallerThan(child.get(), maxSize);
+            nodeSize += checkDirSizeForCondition(child.get(), condition);
         }
-        if (nodeSize <= maxSize)
-        {
-            sizes.push_back(nodeSize);
-        }
-    }
-    return nodeSize;
-}
-
-size_t smallestSize = 70000000;
-size_t findClosestDir(File* node, size_t minSize)
-{
-    if (node->children.empty())
-    {
-        // last node, return size
-        return node->size;
-    }
-
-    size_t nodeSize = 0;
-    if (node->size == 0)
-    {
-        // this is a directory, sum all his children
-        for (auto& child : node->children)
-        {
-            nodeSize += findClosestDir(child.get(), minSize);
-        }
-
-        if (nodeSize > minSize && nodeSize < smallestSize)
-        {
-            smallestSize = nodeSize;
-        }
+        condition(nodeSize);
     }
     return nodeSize;
 }
@@ -142,11 +115,24 @@ int main()
 
     auto root = parseFileTree(input);
 
-    size_t totalSize = findDirsSmallerThan(root.get(), 100000);
+    std::vector<size_t> sizes;
+    size_t              totalSize = checkDirSizeForCondition(root.get(), [&sizes](size_t dirSize) {
+        if (dirSize < 100000)
+        {
+            sizes.push_back(dirSize);
+        }
+    });
 
     size_t spaceAvailable = 70000000 - totalSize;
     size_t spaceRequired  = 30000000 - spaceAvailable;
-    findClosestDir(root.get(), spaceRequired);
+
+    size_t smallestSize = 70000000;
+    checkDirSizeForCondition(root.get(), [&smallestSize, spaceRequired](size_t dirSize) {
+        if (dirSize > spaceRequired && dirSize < smallestSize)
+        {
+            smallestSize = dirSize;
+        }
+    });
 
     std::cout << "Sum of dirs smaller than 100000: " << std::accumulate(sizes.begin(), sizes.end(), 0) << std::endl;
     std::cout << "Smallest dir to delete: " << smallestSize << std::endl;
